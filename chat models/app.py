@@ -1,23 +1,22 @@
+
 import streamlit as st
 
 from langchain_huggingface import ChatHuggingFace, HuggingFacePipeline
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 
-# ------------------ Page Configuration ------------------
-
 st.set_page_config(
     page_title="AI Personality Chatbot",
     page_icon="🤖",
-    layout="centered",
 )
 
 
-# ------------------ Load Local LLM ------------------
+# --------------------------------------------------
+# Load TinyLlama only once
+# --------------------------------------------------
 
 @st.cache_resource
 def load_model():
-
     llm = HuggingFacePipeline.from_model_id(
         model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
         task="text-generation",
@@ -31,10 +30,13 @@ def load_model():
     return ChatHuggingFace(llm=llm)
 
 
-chat_model = load_model()
+with st.spinner("Loading TinyLlama..."):
+    chat_model = load_model()
 
 
-# ------------------ AI Modes ------------------
+# --------------------------------------------------
+# Personality modes
+# --------------------------------------------------
 
 modes = {
     "😡 Angry": (
@@ -57,65 +59,54 @@ modes = {
 }
 
 
-# ------------------ Initialize Session State ------------------
+# --------------------------------------------------
+# Session state
+# --------------------------------------------------
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
-
 
 if "mode" not in st.session_state:
     st.session_state.mode = None
 
 
-# ------------------ Sidebar ------------------
+# --------------------------------------------------
+# Sidebar
+# --------------------------------------------------
 
 st.sidebar.title("🤖 AI Personality")
-
 st.sidebar.write("Choose your AI mode:")
 
 selected_mode = st.sidebar.radio(
     "AI Mode",
-    list(modes.keys()),
+    list(modes.keys())
 )
 
 
-# ------------------ Handle Mode Change ------------------
-
+# Clear conversation when mode changes
 if st.session_state.mode != selected_mode:
-
     st.session_state.mode = selected_mode
-
-    st.session_state.messages = [
-        SystemMessage(content=modes[selected_mode])
-    ]
+    st.session_state.messages = []
 
 
-# ------------------ Main UI ------------------
+# --------------------------------------------------
+# Main UI
+# --------------------------------------------------
 
 st.title("🤖 AI Personality Chatbot")
-
 st.caption(f"Current mode: **{selected_mode}**")
 
 
-# ------------------ Display Chat History ------------------
-
+# Display previous messages
 for message in st.session_state.messages:
 
-    if isinstance(message, SystemMessage):
-        continue
-
-    if isinstance(message, HumanMessage):
-
-        with st.chat_message("user"):
-            st.write(message.content)
-
-    elif isinstance(message, AIMessage):
-
-        with st.chat_message("assistant"):
-            st.write(message.content)
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
 
 
-# ------------------ Chat Input ------------------
+# --------------------------------------------------
+# Chat input
+# --------------------------------------------------
 
 prompt = st.chat_input("Type your message...")
 
@@ -123,29 +114,51 @@ prompt = st.chat_input("Type your message...")
 if prompt:
 
     # Add user message
-    human_message = HumanMessage(content=prompt)
+    st.session_state.messages.append(
+        {
+            "role": "user",
+            "content": prompt
+        }
+    )
 
-    st.session_state.messages.append(human_message)
-
-    # Display user message immediately
     with st.chat_message("user"):
         st.write(prompt)
 
 
-    # Generate AI response
+    # Build LangChain messages
+    messages = [
+        SystemMessage(content=modes[selected_mode])
+    ]
+
+    for message in st.session_state.messages:
+
+        if message["role"] == "user":
+            messages.append(
+                HumanMessage(content=message["content"])
+            )
+
+        elif message["role"] == "assistant":
+            messages.append(
+                AIMessage(content=message["content"])
+            )
+
+
+    # Generate response
     with st.chat_message("assistant"):
 
         with st.spinner("Thinking..."):
 
-            response = chat_model.invoke(
-                st.session_state.messages
-            )
+            response = chat_model.invoke(messages)
 
-            st.write(response.content)
+            answer = response.content
+
+            st.write(answer)
 
 
-    # Add AI response to conversation history
+    # Save assistant response
     st.session_state.messages.append(
-        AIMessage(content=response.content)
+        {
+            "role": "assistant",
+            "content": answer
+        }
     )
-
