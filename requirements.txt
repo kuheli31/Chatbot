@@ -1,0 +1,7 @@
+streamlit
+torch
+transformers
+accelerate
+langchain-huggingface
+langchain-core
+
